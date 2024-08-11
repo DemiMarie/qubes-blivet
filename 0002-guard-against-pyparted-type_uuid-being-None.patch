@@ -1,0 +1,61 @@
+From 9fc508fe315c994c9f65ce85d50df6a0cbb17577 Mon Sep 17 00:00:00 2001
+From: Adam Williamson <awilliam@redhat.com>
+Date: Fri, 26 Jul 2024 08:45:14 -0700
+Subject: [PATCH] part_type_uuid: guard against pyparted type_uuid being None
+
+It's possible for the pyparted partition's `type_uuid` to be None
+in several ways: see all the NULL returns in
+https://github.com/dcantrell/pyparted/blob/d5870bb7a5d512c17c92a4e4fe7e9a8e7c8c3528/src/pydisk.c#L1481
+In the specific case we hit, anaconda since 41.26 will try to get
+the `part_type_uuid` of a partition on an msdos-labeled disk when
+looking for Windows installations; as msdos-labeled disks do not
+support partition type UUIDs, pyparted's call to
+ped_partition_get_type_uuid gets a "msdos disk labels do not
+support partition type-uuids" error from parted and returns NULL,
+so pyparted tries to forward that error somehow then return
+NULL itself (though the error gets swallowed somewhere along the
+line, I had to patch pyparted to find out what was going on).
+
+That means we try to do `UUID(bytes=None)`, which blows up:
+
+TypeError: one of the hex, bytes, bytes_le, fields, or int arguments must be given
+
+due to a check at the start of `UUID.__init__` that the value of
+exactly one of those args is not `None`.
+
+To avoid this, let's check both that our pyparted supports
+`type_uuid` (which I think is the point of the existing condition
+here) *and* that the current pyparted partition's `type_uuid` is
+truth-y before trying to get a `UUID`.
+
+Let's also catch TypeError and ValueError here, as we do in the
+other two cases where we get a `UUID`. I'm not sure why this one
+also catches AttributeError, but it can't hurt anything, so let's
+keep it.
+
+Arguably anaconda shouldn't even try to get a type UUID for a
+device on an msdos-labeled disk, but it seems reasonable to make
+blivet not blow up if it or something else does.
+
+Signed-off-by: Adam Williamson <awilliam@redhat.com>
+---
+ blivet/devices/partition.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/blivet/devices/partition.py b/blivet/devices/partition.py
+index 2d67be81f..3d46ecc84 100644
+--- a/blivet/devices/partition.py
++++ b/blivet/devices/partition.py
+@@ -377,10 +377,10 @@ def part_type_uuid(self):
+         if not self.exists:
+             return self.part_type_uuid_req
+         else:
+-            if hasattr(parted.Partition, "type_uuid"):
++            if hasattr(parted.Partition, "type_uuid") and self.parted_partition.type_uuid:
+                 try:
+                     return UUID(bytes=self.parted_partition.type_uuid)
+-                except AttributeError:
++                except (TypeError, ValueError, AttributeError):
+                     pass
+             return self._part_type_uuid
+ 

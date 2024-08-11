@@ -1,10 +1,10 @@
-host-fc37:
+host-fc41:
   rpm:
     build:
     - python-blivet.spec
 source:
   files:
-  - url: https://ftp.qubes-os.org/distfiles/blivet-3.5.0-tests.tar.gz
-    sha512: blivet-3.5.0-tests.tar.gz.sha512
-  - url: https://ftp.qubes-os.org/distfiles/blivet-3.5.0.tar.gz
-    sha512: blivet-3.5.0.tar.gz.sha512
+  - url: https://ftp.qubes-os.org/distfiles/blivet-@VERSION@-tests.tar.gz
+    sha512: blivet-@VERSION@-tests.tar.gz.sha512
+  - url: https://ftp.qubes-os.org/distfiles/blivet-@VERSION@.tar.gz
+    sha512: blivet-@VERSION@.tar.gz.sha512
